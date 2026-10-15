@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: weather-agent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weather
+      POSTGRES_PASSWORD: weather
+      POSTGRES_DB: weather_agent
+    ports:
+      - "5434:5432"
+    volumes:
+      # PostgreSQL 18 使用主版本子目录，挂载父目录才能安全支持未来升级。
+      - weather_agent_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weather -d weather_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  weather_agent_data:
+

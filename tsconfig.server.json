@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "server",
+    "outDir": "dist-server",
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["server/**/*.ts", "server/agent.js", "server/config.js", "server/memoryAdapter.js", "server/weather.js"],
+  "exclude": ["node_modules", "dist", "dist-server"]
+}
