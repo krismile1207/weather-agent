@@ -2,9 +2,9 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  UnauthorizedException,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { ApiException, ResultCode } from "../common/api-response.js";
 import { AuthService, SESSION_COOKIE_NAME } from "./auth.service.js";
 import type { AuthenticatedRequest } from "./auth.types.js";
 
@@ -17,7 +17,9 @@ export class AuthGuard implements CanActivate {
     const request = http.getRequest<AuthenticatedRequest>();
     const response = http.getResponse<Response>();
     const token = request.cookies?.[SESSION_COOKIE_NAME];
-    if (typeof token !== "string" || !token) throw new UnauthorizedException("请先登录");
+    if (typeof token !== "string" || !token) {
+      throw new ApiException(ResultCode.UNAUTHORIZED, "请先登录");
+    }
 
     try {
       // 用户 ID 只信任服务端验签结果，避免客户端通过请求体越权读取他人记忆。
@@ -25,7 +27,10 @@ export class AuthGuard implements CanActivate {
       return true;
     } catch {
       this.authService.clearSessionCookie(response);
-      throw new UnauthorizedException("登录状态已失效，请重新登录");
+      throw new ApiException(
+        ResultCode.UNAUTHORIZED,
+        "登录状态已失效，请重新登录",
+      );
     }
   }
 }

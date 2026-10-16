@@ -1,11 +1,9 @@
 import crypto from "node:crypto";
-import {
-  ConflictException,
-  Injectable,
-} from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import type { Response } from "express";
+import { ApiException, ResultCode } from "../common/api-response.js";
 import { config } from "../config.js";
 import { DatabaseService } from "../database/database.service.js";
 import type { AuthenticatedUser, CredentialsInput } from "./auth.types.js";
@@ -48,7 +46,10 @@ export class AuthService {
       return result.rows[0];
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
-        throw new ConflictException("该邮箱已注册");
+        throw new ApiException(
+          ResultCode.CONFLICT,
+          "该邮箱已注册",
+        );
       }
       throw error;
     }

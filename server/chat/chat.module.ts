@@ -9,3 +9,4 @@ import { ChatController } from "./chat.controller.js";
   controllers: [ChatController],
 })
 export class ChatModule {}
+ 

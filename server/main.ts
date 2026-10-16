@@ -2,12 +2,19 @@ import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import type { NextFunction, Response } from "express";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { AppModule } from "./app.module.js";
-import { HttpExceptionFilter } from "./common/http-exception.filter.js";
+import {
+  ResultCode,
+  attachRequestId,
+  createErrorResponse,
+  getRequestId,
+  type RequestWithId,
+} from "./common/api-response.js";
 import { config, validateConfig } from "./config.js";
 
 async function bootstrap(): Promise<void> {
@@ -18,12 +25,19 @@ async function bootstrap(): Promise<void> {
   });
 
   app.setGlobalPrefix("api");
-  app.enableCors({ origin: config.webOrigin, credentials: true });
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.enableCors({
+    origin: config.webOrigin,
+    credentials: true,
+    exposedHeaders: ["X-Request-Id"],
+  });
   app.enableShutdownHooks();
 
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.set("trust proxy", 1);
+  app.use((request: RequestWithId, response: Response, next: NextFunction) => {
+    attachRequestId(request, response);
+    next();
+  });
   app.use(helmet({ contentSecurityPolicy: config.nodeEnv === "production" ? undefined : false }));
   app.use(express.json({ limit: "32kb" }));
   app.use(cookieParser());
@@ -33,12 +47,32 @@ async function bootstrap(): Promise<void> {
     limit: 30,
     standardHeaders: true,
     legacyHeaders: false,
+    handler: (request, response) => {
+      const requestId = getRequestId(request as RequestWithId);
+      response.status(ResultCode.TOO_MANY_REQUESTS).json(
+        createErrorResponse(
+          ResultCode.TOO_MANY_REQUESTS,
+          "认证请求过于频繁，请稍后重试",
+          requestId,
+        ),
+      );
+    },
   });
   const chatLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 20,
     standardHeaders: true,
     legacyHeaders: false,
+    handler: (request, response) => {
+      const requestId = getRequestId(request as RequestWithId);
+      response.status(ResultCode.TOO_MANY_REQUESTS).json(
+        createErrorResponse(
+          ResultCode.TOO_MANY_REQUESTS,
+          "聊天请求过于频繁，请稍后重试",
+          requestId,
+        ),
+      );
+    },
   });
   // 全局前缀不会改写底层 Express 的 URL，因此限流器使用浏览器实际请求路径。
   app.use("/api/auth/register", authLimiter);

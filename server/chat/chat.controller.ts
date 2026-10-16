@@ -1,10 +1,9 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Logger,
-  NotFoundException,
   Post,
+  Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
@@ -13,7 +12,13 @@ import { AgentService } from "../agent/agent.service.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/auth.types.js";
-import { getPublicErrorMessage } from "../common/http-exception.filter.js";
+import {
+  ApiException,
+  getRequestId,
+  ResultCode,
+  resolveApiError,
+  type RequestWithId,
+} from "../common/api-response.js";
 import { ConversationsService } from "../conversations/conversations.service.js";
 import type { ChatInput, ChatStreamEvent } from "./chat.types.js";
 
@@ -29,26 +34,36 @@ export class ChatController {
 
   @Post()
   async chat(
+    @Req() request: RequestWithId,
     @CurrentUser() user: AuthenticatedUser,
     @Body() input: ChatInput,
     @Res() response: Response,
   ): Promise<void> {
+    const requestId = getRequestId(request);
     const conversationId = String(input?.conversationId || "");
     const modelId = String(input?.modelId || "");
     const message = String(input?.message || "").trim();
     if (!message || message.length > 2000) {
-      throw new BadRequestException("消息长度需为 1～2000 字");
+      throw new ApiException(
+        ResultCode.BAD_REQUEST,
+        "消息长度需为 1～2000 字",
+      );
     }
     this.conversations.assertSupportedModel(modelId);
     const conversation = await this.conversations.findOwned(user.id, conversationId);
-    if (!conversation) throw new NotFoundException("对话不存在");
+    if (!conversation) {
+      throw new ApiException(
+        ResultCode.NOT_FOUND,
+        "对话不存在",
+      );
+    }
 
     const abortController = new AbortController();
     response.on("close", () => {
       // 浏览器中断请求后立即停止本地推理，避免 Ollama 继续占用算力。
       if (!response.writableEnded) abortController.abort();
     });
-    response.status(200);
+    response.status(ResultCode.SUCCESS);
     response.set({
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -72,13 +87,26 @@ export class ChatController {
         ? message.replace(/\s+/g, " ").slice(0, 28)
         : conversation.title;
       await this.conversations.updateAfterChat(user.id, conversationId, title, modelId);
-      this.writeEvent(response, { type: "done", title });
+      this.writeEvent(response, {
+        type: "done",
+        code: ResultCode.SUCCESS,
+        title,
+        requestId,
+        timestamp: new Date().toISOString(),
+      });
       response.end();
     } catch (error) {
+      const apiError = resolveApiError(error);
       const detail = error instanceof Error ? error.stack : String(error);
-      this.logger.error(detail);
+      this.logger.error(`[${requestId}] ${detail}`);
       if (!response.writableEnded) {
-        this.writeEvent(response, { type: "error", message: getPublicErrorMessage(error) });
+        this.writeEvent(response, {
+          type: "error",
+          code: apiError.code,
+          msg: apiError.msg,
+          requestId,
+          timestamp: new Date().toISOString(),
+        });
         response.end();
       }
     }

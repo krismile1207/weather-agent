@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import { ApiException, ResultCode } from "../common/api-response.js";
 import { config, getModelConfig } from "../config.js";
 import { DatabaseService } from "../database/database.service.js";
 import type { Conversation } from "./conversation.types.js";
@@ -56,7 +57,7 @@ export class ConversationsService {
       getModelConfig(modelId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "不支持所选模型";
-      throw new BadRequestException(message);
+      throw new ApiException(ResultCode.BAD_REQUEST, message);
     }
   }
 }
